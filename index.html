@@ -57,6 +57,12 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 #drawBtn .dot{position:absolute;top:-5px;right:-5px;width:14px;height:14px;border-radius:50%;background:var(--hp);border:2px solid var(--night)}
 .shop{gap:10px}
 .shophead{display:flex;justify-content:space-between;align-items:center}
+.lvrow{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.3);border-radius:12px;padding:6px 6px 6px 12px;text-align:left}
+.lvrow .lv{font-size:16px;color:var(--gold);flex:none}
+.lvrow .odds{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:2px 8px;font-size:11px;font-variant-numeric:tabular-nums}
+.lvrow .ghost{flex:none;padding:7px 10px;font-size:14px}
+.lvrow.flash{animation:lvflash .6s}
+@keyframes lvflash{0%{box-shadow:0 0 0 2px var(--gold),0 0 24px rgba(255,207,90,.7)}100%{box-shadow:none}}
 .bal{color:var(--gold);font-size:24px;font-variant-numeric:tabular-nums}
 .card p.small{font-size:13px;line-height:1.4}
 .offers{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
@@ -189,7 +195,7 @@ let best=0;try{best=+localStorage.getItem('starSummonerBest')||0}catch(e){}
 // ---------- state ----------
 let S=null,st=null,mode='title',uid=1;
 function newGame(){
-  S={t:0,p:{x:0,y:0,hp:100,r:13,inv:0,fx:1,fy:0,maxhp:100},enemies:[],proj:[],gems:[],fx:[],texts:[],slots:Array(EQN).fill(null),bench:Array(BN).fill(null),eq:[],gem:0,draws:0,kills:0,spawnAcc:0,nextElite:75,ringA:0,thornT:0,won:false,shop:[],bought:[],locked:false,nextStock:RESTOCK,newStock:true,sel:null,blasts:[]};
+  S={t:0,p:{x:0,y:0,hp:100,r:13,inv:0,fx:1,fy:0,maxhp:100},enemies:[],proj:[],gems:[],fx:[],texts:[],slots:Array(EQN).fill(null),bench:Array(BN).fill(null),eq:[],gem:0,draws:0,kills:0,spawnAcc:0,nextElite:75,ringA:0,thornT:0,won:false,shop:[],bought:[],locked:false,nextStock:RESTOCK,newStock:true,sel:null,blasts:[],shopLv:1};
   restock();
   S.slots[0]=mk('firebolt',1);
   for(let i=0;i<6;i++){const a=i/6*6.283;S.enemies.push({type:'slime',x:Math.cos(a)*260,y:Math.sin(a)*260,hp:12,max:12,sp:55,r:11,dmg:5,col:'#6bd36b',flash:0,slowT:0,ringT:0,thornT:0,wob:Math.random()*6});}
@@ -228,9 +234,13 @@ function recompute(init){
 let tcCache={};
 
 // ---------- summon & merge ----------
+// shop level odds [common, rare, legendary] and cost to reach the next level
+const ODDS=[null,[85,15,0],[68,28,4],[50,38,12],[35,40,25],[20,40,40]];
+const UPCOST=[null,8,14,22,32];
+const MAXLV=5;
 function roll(){
-  const m=S.t/60,ep=Math.min(18,2+2*m),co=Math.max(40,75-5*m),r=Math.random()*100;
-  const rar=r<co?0:r<100-ep?1:2;
+  const o=ODDS[S.shopLv],r=Math.random()*100;
+  const rar=r<o[0]?0:r<o[0]+o[1]?1:2;
   const pool=IDS.filter(id=>ITEMS[id].rar===rar);
   return pool[Math.floor(Math.random()*pool.length)];
 }
@@ -268,6 +278,10 @@ function tapCell(w,i){
   else{const a=S[S.sel.w],b=S[w],t=a[S.sel.i];a[S.sel.i]=b[i];b[i]=t;S.sel=null;recompute(false);renderSlots();}
   renderShop();
 }
+function upgradeShop(){
+  if(S.shopLv>=MAXLV)return;const c=UPCOST[S.shopLv];if(S.gem<c)return;
+  S.gem-=c;S.shopLv++;S.upFlash=true;renderShop();
+}
 function reroll(){if(S.gem<REROLL)return;S.gem-=REROLL;restock();renderShop();}
 function synHint(id){
   const tr=ITEMS[id].trait;
@@ -304,6 +318,11 @@ function renderShop(){
     :`<div class="act"><p class="small">마법을 누른 다음 다른 칸을 누르면 옮기거나 서로 바꿔요. 보관함에 있어도 합성은 돼요.</p></div>`;
   el.overlay.innerHTML=`<div class="card shop">
     <div class="shophead"><h2>상점 · 배치</h2><span class="bal">◆ ${g}</span></div>
+    <div class="lvrow${S.upFlash?' flash':''}">
+      <span class="lv">상점 Lv.${S.shopLv}</span>
+      <span class="odds">${ODDS[S.shopLv].map((v,k)=>`<span style="color:${RAR[k].col}">${RAR[k].name} ${v}%</span>`).join('')}</span>
+      ${S.shopLv<MAXLV?`<button class="ghost" id="upBtn" ${g<UPCOST[S.shopLv]?'disabled':''}>레벨업 ◆${UPCOST[S.shopLv]}</button>`:`<button class="ghost" disabled>최고 레벨</button>`}
+    </div>
     <p class="small">일반 ◆3 · 희귀 ◆5 · 전설 ◆8 · ${left}초 뒤 새 물건 · 이자 +${intr}</p>
     <div class="offers">${offers}</div>
     <div class="btns"><button class="ghost" id="rerollBtn" ${g<REROLL?'disabled':''}>새로고침 ◆${REROLL}</button><button class="ghost${S.locked?' on':''}" id="lockBtn">${S.locked?'잠금 중':'잠금'}</button></div>
@@ -318,6 +337,8 @@ function renderShop(){
   el.overlay.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>tapCell(b.dataset.w,+b.dataset.i));
   const sb=$('sellSel');if(sb)sb.onclick=()=>{const it=S[S.sel.w][S.sel.i];S.sel=null;sell(it);renderShop();};
   $('rerollBtn').onclick=reroll;
+  const ub=$('upBtn');if(ub)ub.onclick=upgradeShop;
+  S.upFlash=false;
   $('lockBtn').onclick=()=>{S.locked=!S.locked;renderShop();};
   $('closeShop').onclick=resume;
 }
@@ -386,6 +407,7 @@ function showTitle(){
       <div><span>👆</span><span>화면을 끌어서 움직이세요. 공격은 자동이에요. (PC: WASD·방향키, 상점은 스페이스)</span></div>
       <div><span>◆</span><span>쓰러뜨린 적이 마나 결정을 떨어뜨려요. <b style="color:var(--gold)">상점</b>을 열면 게임이 멈추고, 진열된 마법 4개 중 골라 살 수 있어요.</span></div>
       <div><span>🔄</span><span>◆2로 새로고침, 잠금으로 진열 유지. 30초마다 새 물건이 들어오고 남은 ◆에 이자가 붙어요.</span></div>
+      <div><span>⬆️</span><span>상점 <b>레벨업</b>을 하면 희귀·전설 마법이 더 자주 나와요. (최대 Lv.5)</span></div>
       <div><span>★</span><span>같은 마법 3개가 모이면 자동으로 합쳐져서 ★2, ★2 셋은 ★3이 돼요.</span></div>
       <div><span>🎒</span><span><b>장착 5칸</b>만 싸우고 시너지에 들어가요. 나머지는 <b>보관함 10칸</b>에 모아서 합성하세요. 상점 화면에서 마법을 눌러 옮기거나 바꿀 수 있어요.</span></div>
     </div>
