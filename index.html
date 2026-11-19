@@ -64,7 +64,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 @keyframes over{0%{color:#ef7d57}17%{color:#ffcd75}33%{color:#a7f070}50%{color:#73eff7}67%{color:#a77bf3}83%{color:#ff8fc8}100%{color:#ef7d57}}
 .pill.on{opacity:1;background:var(--panel);box-shadow:inset 0 2px 0 rgba(244,244,244,.15)}
 
-#tray{position:absolute;left:0;right:0;bottom:0;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 12px);padding-top:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;gap:8px;align-items:stretch;justify-content:center;background:linear-gradient(to top,rgba(26,28,44,.97) 70%,rgba(26,28,44,0))}
+#tray{position:absolute;left:0;right:0;bottom:0;padding-bottom:max(24px,calc(env(safe-area-inset-bottom,0px) + 14px));padding-top:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;gap:8px;align-items:stretch;justify-content:center;background:linear-gradient(to top,rgba(26,28,44,.97) 70%,rgba(26,28,44,0))}
 #slots{display:grid;grid-template-columns:repeat(var(--eq,5),minmax(0,54px));gap:5px;min-width:0;align-content:center}
 .slot{position:relative;aspect-ratio:1;max-width:100%;background:rgba(38,43,68,.85);box-shadow:inset 0 0 0 2px var(--panel2);display:grid;place-items:center;padding:0}
 .slot.full,.cell.has{background:linear-gradient(135deg,color-mix(in srgb,var(--tc) 22%,var(--dark)) 50%,color-mix(in srgb,var(--tc2,var(--tc)) 22%,var(--dark)) 50%);box-shadow:inset 3px 3px 0 var(--tc),inset -3px -3px 0 var(--tc2,var(--tc)),inset 0 -8px 0 rgba(0,0,0,.25)}
@@ -72,7 +72,7 @@ button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
 .slot .rr{position:absolute;top:4px;right:4px;width:5px;height:5px}
 .slot.pop{animation:pop .4s steps(4)}
 @keyframes pop{0%{transform:scale(1)}50%{transform:scale(1.2)}100%{transform:scale(1)}}
-#drawBtn{position:relative;min-width:80px;background:var(--gold);color:var(--dark);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;box-shadow:inset 0 -6px 0 var(--gold2),inset 0 3px 0 #fff2c8;font-size:18px;padding:6px 8px 9px}
+#drawBtn{position:relative;min-width:84px;min-height:64px;touch-action:none;background:var(--gold);color:var(--dark);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;box-shadow:inset 0 -6px 0 var(--gold2),inset 0 3px 0 #fff2c8;font-size:18px;padding:6px 8px 9px}
 #drawBtn b{font-family:var(--font);font-size:11px;font-weight:normal;background:var(--dark);color:var(--gold);padding:2px 6px}
 #drawBtn:active{transform:translateY(2px);box-shadow:inset 0 -2px 0 var(--gold2),inset 0 3px 0 #fff2c8}
 #drawBtn.poor{filter:saturate(.35) brightness(.75)}
@@ -517,6 +517,7 @@ const PERKS={
   restock:{name:'입고 주기 -5초',icon:'clock',max:3,desc:()=>`새 물건이 ${restockT()}초에서 ${restockT()-5}초마다`},
 };
 function showPerk(){
+  releaseJoy();
   const pool=Object.keys(PERKS).filter(k=>pk(k)<PERKS[k].max&&(!PERKS[k].minLv||S.lv>=PERKS[k].minLv));
   if(!pool.length){S.perkQ=0;return;}
   const pick=[];const nPick=S.summ==='archmage'?4:3;while(pick.length<nPick&&pool.length)pick.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
@@ -536,7 +537,11 @@ function takePerk(k){
   renderSlots();toast(`특성 획득: ${PERKS[k].name}`);
   if(S.perkQ>0)showPerk();else{el.overlay.innerHTML='';resume();}
 }
+function releaseJoy(){joy.on=false;joy.id=null;for(const k in keys)keys[k]=false;
+  // the finger that opened a window lifts right after; don't let that land on a button inside it
+  el.overlay.style.pointerEvents='none';clearTimeout(releaseJoy.t);releaseJoy.t=setTimeout(()=>{el.overlay.style.pointerEvents='';},250);}
 function showShop(){
+  releaseJoy();
   if(mode!=='play')return;
   mode='shop';S.newStock=false;S.sel=null;lastHud='';
   el.overlay.hidden=false;renderShop();focusMain();
@@ -643,8 +648,12 @@ el.slots.addEventListener('click',e=>{
   const b=e.target.closest('.slot.full');if(!b||mode!=='play')return;
   showInfo(S.slots[+b.dataset.i]);
 });
+// open on first contact: a moving thumb often slides enough to cancel a click
+el.drawBtn.addEventListener('pointerdown',e=>{e.preventDefault();showShop();});
 el.drawBtn.addEventListener('click',()=>{showShop();});
+el.pause.addEventListener('pointerdown',e=>{e.preventDefault();if(mode==='play')showPause();});
 el.pause.addEventListener('click',()=>{if(mode==='play')showPause();});
+el.slots.addEventListener('pointerdown',e=>{const b=e.target.closest('.slot.full');if(!b||mode!=='play')return;e.preventDefault();showInfo(S.slots[+b.dataset.i]);});
 // test helper: run the simulation 2x per frame (keeps collision steps the same size)
 let speedMul=1;try{speedMul=+localStorage.getItem('starSummonerSpeed')===2?2:1;}catch(e){}
 const speedBtn=$('speedBtn');
@@ -724,6 +733,7 @@ function focusMain(){const b=el.overlay.querySelector('.big');if(b)b.focus({prev
 function blurAll(){if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();}
 function start(id,mapId){newGame(typeof id==='string'?id:META.last,mapId||META.lastMap);groundPat=null;mode='play';el.overlay.hidden=true;blurAll();last=performance.now();}
 function showPause(){
+  releaseJoy();
   mode='pause';el.overlay.hidden=false;
   el.overlay.innerHTML=`<div class="card"><h2>일시정지</h2>${traitGuide()}<div class="btns"><button class="ghost" id="quitBtn">처음으로</button><button class="big" id="resBtn">계속하기</button></div></div>`;
   $('resBtn').onclick=resume;$('quitBtn').onclick=()=>{if(S&&S.t>20){const d=dustFor(false);META.dust+=d;saveMeta();toast(`별가루 +${d}`);}showTitle();};focusMain();
@@ -731,6 +741,7 @@ function showPause(){
 function resume(){mode='play';el.overlay.hidden=true;blurAll();last=performance.now();}
 function spList(id,star){return SP[id].map((t,i)=>{const need=i+2,on=star>=need;return`<div class="spl${on?' on':''}">${on?'▶':'·'} ★${need}${on?'':' (잠김)'} ${t}</div>`;}).join('');}
 function showInfo(it){
+  releaseJoy();
   mode='pause';const I=ITEMS[it.id],t=TRAITS[I.trait];
   el.overlay.hidden=false;
   el.overlay.innerHTML=`<div class="card">
