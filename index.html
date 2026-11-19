@@ -52,7 +52,34 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 #drawBtn{min-width:92px;border-radius:16px;background:linear-gradient(160deg,#ffd970,#ff9f43);color:#2a1600;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;box-shadow:0 4px 0 #b4621a,0 0 18px rgba(255,190,80,.4);font-size:20px;padding:6px 10px}
 #drawBtn b{font-size:14px;font-weight:normal;background:rgba(0,0,0,.18);border-radius:99px;padding:1px 8px}
 #drawBtn:disabled{filter:grayscale(.8) brightness(.6);box-shadow:0 4px 0 #333}
-#drawBtn:active:not(:disabled){transform:translateY(3px);box-shadow:0 1px 0 #b4621a}
+#drawBtn:active{transform:translateY(3px);box-shadow:0 1px 0 #b4621a}
+#drawBtn{position:relative}
+#drawBtn.poor{filter:saturate(.45) brightness(.8)}
+#drawBtn .dot{position:absolute;top:-5px;right:-5px;width:14px;height:14px;border-radius:50%;background:var(--hp);border:2px solid var(--night)}
+.shop{gap:10px}
+.shophead{display:flex;justify-content:space-between;align-items:center}
+.bal{color:var(--gold);font-size:24px;font-variant-numeric:tabular-nums}
+.card p.small{font-size:13px;line-height:1.4}
+.offers{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.offer{position:relative;border-radius:14px;padding:10px 6px 8px;background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--tc) 22%,transparent),rgba(0,0,0,.35));border:1.5px solid var(--tc);display:flex;flex-direction:column;align-items:center;gap:3px;min-height:136px;min-width:0}
+.offer .ic{font-size:32px;line-height:1.1}
+.offer .nm{font-size:15px}
+.offer .meta{font-size:11px}
+.offer .bd{font-size:11px;color:var(--muted);line-height:1.3}
+.offer .sy{font-size:11px}
+.offer.merge{box-shadow:0 0 0 2px var(--gold),0 0 18px rgba(255,207,90,.5)}
+.offer.merge .bd{color:var(--gold)}
+.offer .pr{margin-top:auto;font-size:14px;background:rgba(0,0,0,.35);border-radius:99px;padding:2px 10px;color:var(--gold)}
+.offer:disabled{opacity:.45;cursor:default}
+.offer.empty{border-style:dashed;border-color:var(--line);background:none;color:var(--muted);justify-content:center;font-size:14px}
+.offer.empty b{color:var(--gold);font-weight:normal}
+.mini{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:4px}
+.mini button{aspect-ratio:1;border-radius:8px;font-size:17px;background:rgba(255,255,255,.05);border:1px solid var(--line);position:relative;padding:0;max-width:100%}
+.mini button.has{border-color:var(--tc)}
+.mini button.sel{border-color:var(--hp);background:rgba(255,93,122,.25)}
+.mini small{position:absolute;bottom:0;left:0;right:0;font-size:8px;color:var(--gold);letter-spacing:-1px}
+.ghost.on{border-color:var(--gold);color:var(--gold)}
+.ghost:disabled{opacity:.45}
 
 #pop{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%) scale(.6);opacity:0;pointer-events:none;transition:transform .2s,opacity .2s;background:var(--panel);border:2px solid var(--tc,var(--line));border-radius:18px;padding:14px 22px;text-align:center;min-width:160px;box-shadow:0 0 30px -6px var(--tc,transparent)}
 #pop.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
@@ -104,7 +131,7 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
   <div id="pop"></div>
   <div id="tray">
     <div id="slots"></div>
-    <button id="drawBtn" aria-label="소환"><span>소환</span><b id="cost">◆ 4</b></button>
+    <button id="drawBtn" aria-label="상점 열기"><span>상점</span><b id="cost">◆ 4</b></button>
   </div>
   <div id="overlay"></div>
 </div>
@@ -153,7 +180,8 @@ let best=0;try{best=+localStorage.getItem('starSummonerBest')||0}catch(e){}
 // ---------- state ----------
 let S=null,st=null,mode='title',uid=1;
 function newGame(){
-  S={t:0,p:{x:0,y:0,hp:100,r:13,inv:0,fx:1,fy:0,maxhp:100},enemies:[],proj:[],gems:[],fx:[],texts:[],inv:[],gem:0,draws:0,kills:0,spawnAcc:0,nextElite:75,ringA:0,thornT:0,won:false};
+  S={t:0,p:{x:0,y:0,hp:100,r:13,inv:0,fx:1,fy:0,maxhp:100},enemies:[],proj:[],gems:[],fx:[],texts:[],inv:[],gem:0,draws:0,kills:0,spawnAcc:0,nextElite:75,ringA:0,thornT:0,won:false,shop:[],bought:[],locked:false,nextStock:RESTOCK,newStock:true,sellSel:null};
+  restock();
   S.inv.push(mk('firebolt',1));
   for(let i=0;i<6;i++){const a=i/6*6.283;S.enemies.push({type:'slime',x:Math.cos(a)*260,y:Math.sin(a)*260,hp:12,max:12,sp:55,r:11,dmg:5,col:'#6bd36b',flash:0,slowT:0,ringT:0,thornT:0,wob:Math.random()*6});}
   recompute(true);renderSlots();
@@ -193,17 +221,79 @@ function roll(){
   const pool=IDS.filter(id=>ITEMS[id].rar===rar);
   return pool[Math.floor(Math.random()*pool.length)];
 }
-function summon(free){
-  if(mode!=='play')return;
-  if(!free){if(S.gem<cost())return;S.gem-=cost();S.draws++;}
-  const id=roll(),it=mk(id,1);
+function giveItem(id){
+  const it=mk(id,1);
   S.inv.push(it);
   const merged=mergeAll();
   let sold=0;
   if(S.inv.length>CAP){const i=S.inv.indexOf(it);if(i>=0){S.inv.splice(i,1);sold=sellValue(it);S.gem+=sold;}}
   recompute(false);renderSlots(merged.map(m=>m.uid));
-  showPop(id,merged,sold);
   burst(S.p.x,S.p.y,ITEMS[id].trait,merged.length?40:18);
+  return{merged,sold};
+}
+function freeSummon(){const id=roll(),r=giveItem(id);showPop(id,r.merged,r.sold);}
+
+// ---------- shop ----------
+const SHOP_N=4,REROLL=2,RESTOCK=30;
+function restock(){S.shop=[];for(let i=0;i<SHOP_N;i++)S.shop.push(roll());S.bought=[];}
+const owned1=id=>S.inv.filter(x=>x.id===id&&x.star===1).length;
+const willMerge=id=>owned1(id)>=2;
+const canFit=id=>S.inv.length<CAP||willMerge(id);
+function buy(i){
+  const id=S.shop[i],c=cost();
+  if(!id||S.gem<c||!canFit(id))return;
+  S.gem-=c;S.draws++;S.shop[i]=null;
+  const r=giveItem(id);
+  const top=r.merged[r.merged.length-1];
+  S.bought[i]=top?`합성! <b>${ITEMS[top.id].name} ${'★'.repeat(top.star)}</b>`:`<b>${ITEMS[id].name}</b> 구매`;
+  renderShop();
+}
+function reroll(){if(S.gem<REROLL)return;S.gem-=REROLL;restock();renderShop();}
+function synHint(id){
+  const tr=ITEMS[id].trait;
+  if(S.inv.some(x=>x.id===id))return'';
+  const n=(tcCache[tr]||0)+1;
+  return n===2||n===3?`<div class="sy" style="color:${TRAITS[tr].color}">${TRAITS[tr].name} ${n}종 시너지!</div>`:'';
+}
+function showShop(){
+  if(mode!=='play')return;
+  mode='shop';S.newStock=false;S.sellSel=null;lastHud='';
+  el.overlay.hidden=false;renderShop();focusMain();
+}
+function renderShop(){
+  const c=cost(),g=Math.floor(S.gem),intr=Math.min(5,Math.floor(g/10)),left=Math.max(0,Math.ceil(S.nextStock-S.t));
+  let offers='';
+  for(let i=0;i<SHOP_N;i++){
+    const id=S.shop[i];
+    if(!id){offers+=`<div class="offer empty">${S.bought[i]||'품절'}</div>`;continue;}
+    const I=ITEMS[id],tc=TRAITS[I.trait].color,n=owned1(id),mg=n>=2,fit=canFit(id);
+    const bd=mg?'사면 ★2 합성!':n?`보유 ${n}/3`:'새 마법';
+    offers+=`<button class="offer${mg?' merge':''}" data-buy="${i}" style="--tc:${tc}" ${g<c||!fit?'disabled':''} aria-label="${I.name} 구매">
+      <span class="ic">${I.icon}</span><span class="nm">${I.name}</span>
+      <span class="meta"><span style="color:${RAR[I.rar].col}">${RAR[I.rar].name}</span> · <span style="color:${tc}">${TRAITS[I.trait].name}</span></span>
+      <span class="bd">${fit?bd:'가방이 가득 찼어요'}</span>${synHint(id)}
+      <span class="pr">◆ ${c}</span></button>`;
+  }
+  let mini='';
+  for(let i=0;i<CAP;i++){const it=S.inv[i];
+    if(!it){mini+=`<button disabled aria-label="빈 칸"></button>`;continue;}
+    const I=ITEMS[it.id],sel=S.sellSel===it.uid;
+    mini+=`<button class="has${sel?' sel':''}" data-sell="${i}" style="--tc:${TRAITS[I.trait].color}" aria-label="${I.name} 판매">${sel?'◆'+sellValue(it):I.icon}<small>${sel?'판매?':'★'.repeat(it.star)}</small></button>`;}
+  el.overlay.innerHTML=`<div class="card shop">
+    <div class="shophead"><h2>상점</h2><span class="bal">◆ ${g}</span></div>
+    <p class="small">구매가 ◆${c} (살 때마다 올라요) · ${left}초 뒤 새 물건과 이자 +${intr}</p>
+    <div class="offers">${offers}</div>
+    <div class="btns"><button class="ghost" id="rerollBtn" ${g<REROLL?'disabled':''}>새로고침 ◆${REROLL}</button><button class="ghost${S.locked?' on':''}" id="lockBtn">${S.locked?'잠금 중':'잠금'}</button></div>
+    <div class="mini">${mini}</div>
+    <p class="small">가방 칸을 두 번 누르면 판매해요. 이자는 ◆10개당 1개, 최대 5개예요.</p>
+    <button class="big" id="closeShop">전투로 돌아가기</button>
+  </div>`;
+  el.overlay.querySelectorAll('[data-buy]').forEach(b=>b.onclick=()=>buy(+b.dataset.buy));
+  el.overlay.querySelectorAll('[data-sell]').forEach(b=>b.onclick=()=>{const it=S.inv[+b.dataset.sell];if(!it)return;
+    if(S.sellSel===it.uid){S.sellSel=null;sell(it);}else S.sellSel=it.uid;renderShop();});
+  $('rerollBtn').onclick=reroll;
+  $('lockBtn').onclick=()=>{S.locked=!S.locked;renderShop();};
+  $('closeShop').onclick=resume;
 }
 function mergeAll(){
   const out=[];let found=true;
@@ -255,7 +345,7 @@ el.slots.addEventListener('click',e=>{
   const b=e.target.closest('.slot.full');if(!b||mode!=='play')return;
   showInfo(S.inv[+b.dataset.i]);
 });
-el.drawBtn.addEventListener('click',()=>{summon(false);el.drawBtn.blur();});
+el.drawBtn.addEventListener('click',()=>{showShop();});
 el.pause.addEventListener('click',()=>{if(mode==='play')showPause();});
 
 function traitGuide(){
@@ -268,10 +358,11 @@ function showTitle(){
     <h1>별빛 소환사</h1>
     <p>밤의 초원에서 몬스터 떼를 10분 동안 버티세요.</p>
     <div class="how">
-      <div><span>👆</span><span>화면을 끌어서 움직이세요. 공격은 자동이에요. (PC: WASD·방향키)</span></div>
-      <div><span>◆</span><span>쓰러뜨린 적이 마나 결정을 떨어뜨려요. 모아서 <b style="color:var(--gold)">소환</b>을 누르면 마법이 무작위로 나와요.</span></div>
+      <div><span>👆</span><span>화면을 끌어서 움직이세요. 공격은 자동이에요. (PC: WASD·방향키, 상점은 스페이스)</span></div>
+      <div><span>◆</span><span>쓰러뜨린 적이 마나 결정을 떨어뜨려요. <b style="color:var(--gold)">상점</b>을 열면 게임이 멈추고, 진열된 마법 4개 중 골라 살 수 있어요.</span></div>
+      <div><span>🔄</span><span>◆2로 새로고침, 잠금으로 진열 유지. 30초마다 새 물건이 들어오고 남은 ◆에 이자가 붙어요.</span></div>
       <div><span>★</span><span>같은 마법 3개가 모이면 자동으로 합쳐져서 ★2, ★2 셋은 ★3이 돼요.</span></div>
-      <div><span>🎒</span><span>가방은 8칸이에요. 칸을 누르면 정보를 보거나 판매할 수 있어요.</span></div>
+      <div><span>🎒</span><span>가방은 8칸이에요. 칸을 누르면 정보를 볼 수 있고, 상점에서 두 번 누르면 판매해요.</span></div>
     </div>
     ${traitGuide()}
     ${best?`<p>최고 기록 ${fmt(best)}</p>`:''}
@@ -306,11 +397,11 @@ function showEnd(won){
   el.overlay.hidden=false;
   el.overlay.innerHTML=`<div class="card">
     <h1>${won?'새벽이 밝았어요!':'쓰러졌어요'}</h1>
-    <p>${won?'10분을 버텨냈어요. 초원이 지켜졌어요.':'다음엔 시너지를 노려보세요.'}${newBest?' 최고 기록 갱신!':''}</p>
+    <p>${won?'10분을 버텨냈어요. 초원이 지켜졌어요.':'다음엔 시너지와 이자를 노려보세요.'}${newBest?' 최고 기록 갱신!':''}</p>
     <div class="statsgrid">
       <div><b>${fmt(S.t)}</b><span>생존 시간</span></div>
       <div><b>${S.kills}</b><span>처치</span></div>
-      <div><b>${S.draws}</b><span>소환 횟수</span></div>
+      <div><b>${S.draws}</b><span>구매 횟수</span></div>
       <div><b>${Math.max(0,...S.inv.map(i=>i.star))}★</b><span>최고 등급</span></div>
     </div>
     <div style="font-size:26px;letter-spacing:2px">${S.inv.map(i=>ITEMS[i.id].icon).join('')}</div>
@@ -323,7 +414,7 @@ const fmt=t=>{t=Math.floor(t);return String(Math.floor(t/60)).padStart(2,'0')+':
 // ---------- input ----------
 const keys={};
 const joy={on:false,id:null,ox:0,oy:0,x:0,y:0};
-window.addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key===' '&&mode==='play'){summon(false);e.preventDefault();}if(e.key==='Escape'){if(mode==='play')showPause();else if(mode==='pause')resume();}});
+window.addEventListener('keydown',e=>{keys[e.key.toLowerCase()]=true;if(e.key===' '||e.key.toLowerCase()==='e'){if(mode==='play'){showShop();e.preventDefault();}else if(mode==='shop'&&e.key!==' '){resume();}}if(e.key==='Escape'){if(mode==='play')showPause();else if(mode==='pause'||mode==='shop')resume();}});
 window.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;if(e.key===' '&&mode==='play')e.preventDefault();});
 cv.addEventListener('pointerdown',e=>{if(mode!=='play')return;joy.on=true;joy.id=e.pointerId;joy.ox=joy.x=e.clientX;joy.oy=joy.y=e.clientY;cv.setPointerCapture(e.pointerId);});
 cv.addEventListener('pointermove',e=>{if(joy.on&&e.pointerId===joy.id){joy.x=e.clientX;joy.y=e.clientY;}});
@@ -426,6 +517,9 @@ function update(dt){
   // spawn
   S.spawnAcc+=dt*(1.8+S.t/22);
   while(S.spawnAcc>=1){S.spawnAcc--;if(S.enemies.length<320)spawn();}
+  if(S.t>=S.nextStock){S.nextStock+=RESTOCK;const intr=Math.min(5,Math.floor(S.gem/10));S.gem+=intr;
+    if(!S.locked){restock();S.newStock=true;}
+    toast(`${S.locked?'상점 잠금 유지':'상점에 새 물건이 들어왔어요'}${intr?` · 이자 ◆+${intr}`:''}`);}
   if(S.t>=S.nextElite){S.nextElite+=75;spawn('elite');toast('강한 적이 나타났어요! 쓰러뜨리면 보물상자');}
 
   buildGrid();
@@ -479,7 +573,7 @@ function update(dt){
     const q=d2(g,p);
     if(g.mag||q<pr*pr){g.mag=true;const l=Math.sqrt(q)||1,sp=Math.max(260,600-l);g.x+=(p.x-g.x)/l*sp*dt;g.y+=(p.y-g.y)/l*sp*dt;}
     if(q<22*22){g.got=true;
-      if(g.chest){S.gem+=20;toast('보물상자! 무료 소환 + ◆20');summon(true);}
+      if(g.chest){S.gem+=20;toast('보물상자! 무료 마법 + ◆20');freeSummon();}
       else S.gem+=g.v*st.gemMul;}
   }
   S.gems=S.gems.filter(g=>!g.got);
@@ -582,7 +676,7 @@ let lastHud='';
 function hud(){
   if(!S)return;
   const p=S.p,c=cost(),g=Math.floor(S.gem);
-  const key=[R(p.hp),R(p.maxhp),Math.floor(S.t),g,S.kills,c].join('|');
+  const key=[R(p.hp),R(p.maxhp),Math.floor(S.t),g,S.kills,c,S.newStock].join('|');
   if(key===lastHud)return;lastHud=key;
   el.hpbar.style.width=(100*p.hp/p.maxhp)+'%';
   el.hptext.textContent=`${R(p.hp)} / ${R(p.maxhp)}`;
@@ -590,7 +684,10 @@ function hud(){
   el.gems.textContent=`◆ ${g}`;
   el.kills.textContent=`처치 ${S.kills}`;
   el.cost.textContent=`◆ ${c}`;
-  el.drawBtn.disabled=g<c;
+  el.drawBtn.classList.toggle('poor',g<c);
+  let dot=el.drawBtn.querySelector('.dot');
+  if(S.newStock&&!dot){dot=document.createElement('span');dot.className='dot';el.drawBtn.appendChild(dot);}
+  else if(!S.newStock&&dot)dot.remove();
 }
 
 // ---------- loop ----------
