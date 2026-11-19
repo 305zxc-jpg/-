@@ -130,6 +130,8 @@ button:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .tag{display:inline-block;font-size:12px;padding:2px 9px;border-radius:99px;border:1px solid currentColor;margin:0 2px}
 .desc{background:rgba(0,0,0,.3);border-radius:12px;padding:10px;font-size:14px;line-height:1.5;text-align:left}
 .desc .nx{color:var(--muted);font-size:13px}
+.spl{font-size:13px;color:var(--muted);margin-top:4px}
+.spl.on{color:var(--gold)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
@@ -184,6 +186,25 @@ const ITEMS={
   worldtree:{name:'세계수',icon:'🌲',trait:'nature',rar:3,w:0,desc:s=>`최대 체력 +${[0,60,120,200][s]}, 초당 회복 +${[0,2,4,7][s]}. 쓰러지면 부활 (게임당 ${s}번)`},
   acorn:{name:'황금 도토리',icon:'🌰',trait:'nature',rar:0,w:0,desc:s=>`줍는 범위 +${[0,40,80,140][s]}, 결정 획득 +${[0,20,45,80][s]}%`},
 };
+// special abilities unlocked by merging: [★2, ★3]
+const SP={
+  firebolt:['맞으면 작게 폭발','폭발 + 불씨 3개로 분열'],
+  meteor:['떨어진 자리에 불바다','불바다 + 작은 운석 3개로 쪼개짐'],
+  fireorb:['공격이 12% 확률로 적을 불태움','불태울 확률 25%'],
+  frostring:['맞은 적을 25% 확률로 얼림','2초마다 조각마다 얼음 파편 발사'],
+  lance:['끝까지 날아가면 파편 5개로 분열','파편 8개, 파편도 관통'],
+  frostarmor:['맞으면 주변을 얼리는 서리 폭발','서리 폭발 + 때린 적에게 반격'],
+  chain:['튈 때마다 전기 폭발','튀는 횟수 2배, 맞은 적 기절'],
+  whirl:['돌아올 때 크기 1.6배','꼭짓점에 회오리를 남김'],
+  boots:['움직이면 바람 칼날 자국','바람 칼날이 더 크고 강해짐'],
+  thorns:['덩굴로 쓰러진 적이 가시 4개 발사','가시 8개 + 덩굴 안 적 둔화'],
+  lifetree:['10초마다 회복 파동 (10%, 적 밀쳐냄)','회복 15% + 파동 피해'],
+  acorn:['결정 20% 확률로 2배','결정 40% 확률로 2배'],
+  sun:['폭발과 함께 불꽃 6발 사방 발사','불꽃 12발'],
+  zero:['얼어 있다 쓰러진 적이 산산조각 폭발','얼어 있는 적이 받는 피해 +50%'],
+  thunder:['벼락이 옆 적에게 한 번 더 튐','벼락 자리에 전기 폭발'],
+  worldtree:['부활할 때 거대 폭발','부활 후 5초 무적'],
+};
 const IDS=Object.keys(ITEMS);
 const EQN=5,BN=10;
 const PRICE=[3,5,8,12];
@@ -203,7 +224,7 @@ let best=0;try{best=+localStorage.getItem('starSummonerBest')||0}catch(e){}
 // ---------- state ----------
 let S=null,st=null,mode='title',uid=1;
 function newGame(){
-  S={t:0,p:{x:0,y:0,hp:100,r:13,inv:0,fx:1,fy:0,maxhp:100},enemies:[],proj:[],gems:[],fx:[],texts:[],slots:Array(EQN).fill(null),bench:Array(BN).fill(null),eq:[],gem:6,draws:0,kills:0,spawnAcc:0,nextElite:75,ringA:0,thornT:0,won:false,shop:[],bought:[],locked:false,nextStock:RESTOCK,newStock:true,sel:null,blasts:[],lv:1,xp:0,revUsed:0,items:[],nextItem:15};
+  S={t:0,p:{x:0,y:0,hp:100,r:13,inv:0,fx:1,fy:0,maxhp:100},enemies:[],proj:[],gems:[],fx:[],texts:[],slots:Array(EQN).fill(null),bench:Array(BN).fill(null),eq:[],gem:6,draws:0,kills:0,spawnAcc:0,nextElite:75,ringA:0,thornT:0,won:false,shop:[],bought:[],locked:false,nextStock:RESTOCK,newStock:true,sel:null,blasts:[],zones:[],lv:1,xp:0,revUsed:0,items:[],nextItem:15};
   restock();
   S.slots[0]=mk('firebolt',1);
   for(let i=0;i<6;i++){const a=i/6*6.283;S.enemies.push({type:'slime',x:Math.cos(a)*260,y:Math.sin(a)*260,hp:12,max:12,sp:55,r:11,dmg:5,col:'#6bd36b',flash:0,slowT:0,ringT:0,thornT:0,wob:Math.random()*6});}
@@ -223,7 +244,7 @@ function recompute(init){
   S.eq=S.slots.filter(Boolean);
   const s={dmg:1,cd:1,speed:150,maxhp:100,regen:0,armor:0,pickup:70,gemMul:1,slow:0};
   const tc=traitCounts();
-  s.blast=false;s.amp=1;s.echo=0;
+  s.blast=false;s.amp=1;s.echo=0;s.ignite=0;s.trail=0;s.armorNova=0;s.pulse=0;s.dbl=0;s.shatter=false;s.zeroAmp=false;s.reviveStar=0;
   if(tc.fire>=3){s.dmg*=1.6;s.blast=true;}else if(tc.fire>=2)s.dmg*=1.3;
   if(tc.frost>=3){s.slow=.6;s.amp=1.3;}else if(tc.frost>=2)s.slow=.4;
   if(tc.storm>=3){s.cd*=.6;s.echo=.25;}else if(tc.storm>=2)s.cd*=.75;
@@ -233,8 +254,15 @@ function recompute(init){
     case'boots':s.speed*=1+[0,.1,.18,.3][k];s.cd*=1-[0,.05,.1,.16][k];break;
     case'frostarmor':s.armor=1-(1-s.armor)*(1-[0,.12,.22,.35][k]);break;
     case'lifetree':s.maxhp+=[0,25,50,90][k];s.regen+=[0,.5,1.2,2.5][k];break;
-    case'worldtree':s.maxhp+=[0,60,120,200][k];s.regen+=[0,2,4,7][k];s.revives=Math.max(s.revives||0,k);break;
+    case'worldtree':s.maxhp+=[0,60,120,200][k];s.regen+=[0,2,4,7][k];s.revives=Math.max(s.revives||0,k);s.reviveStar=Math.max(s.reviveStar,k);break;
     case'acorn':s.pickup+=[0,40,80,140][k];s.gemMul+=[0,.2,.45,.8][k];break;}}
+  for(const it of S.eq){const k=it.star;if(k<2)continue;switch(it.id){
+    case'fireorb':s.ignite=Math.max(s.ignite,k===3?.25:.12);break;
+    case'boots':s.trail=Math.max(s.trail,k);break;
+    case'frostarmor':s.armorNova=Math.max(s.armorNova,k);break;
+    case'lifetree':s.pulse=Math.max(s.pulse,k);break;
+    case'acorn':s.dbl=Math.max(s.dbl,k===3?.4:.2);break;
+    case'zero':s.shatter=true;if(k===3)s.zeroAmp=true;break;}}
   const old=S.p.maxhp;S.p.maxhp=s.maxhp;
   if(init)S.p.hp=s.maxhp;else if(s.maxhp>old)S.p.hp+=s.maxhp-old;
   S.p.hp=Math.min(S.p.hp,S.p.maxhp);
@@ -285,7 +313,7 @@ function buy(i){
   S.gem-=c;S.draws++;S.shop[i]=null;
   const r=giveItem(id);
   const top=r.merged[r.merged.length-1];
-  S.bought[i]=top?`합성! <b>${ITEMS[top.id].name} ${'★'.repeat(top.star)}</b>`:`<b>${ITEMS[id].name}</b> 구매`;
+  S.bought[i]=top?`합성! <b>${ITEMS[top.id].name} ${'★'.repeat(top.star)}</b><br>✨ ${SP[top.id][top.star-2]}`:`<b>${ITEMS[id].name}</b> 구매`;
   renderShop();
 }
 function tapCell(w,i){
@@ -377,7 +405,7 @@ let popT=0,toastT=0;
 function showPop(id,merged,sold){
   const I=ITEMS[id],tc=TRAITS[I.trait].color;
   let extra='';
-  if(merged.length){const top=merged[merged.length-1];extra=`<div class="mg">합성! ${ITEMS[top.id].name} ${'★'.repeat(top.star)}</div>`;}
+  if(merged.length){const top=merged[merged.length-1];extra=`<div class="mg">합성! ${ITEMS[top.id].name} ${'★'.repeat(top.star)}</div><div class="sub">✨ ${SP[top.id][top.star-2]}</div>`;}
   else if(sold)extra=`<div class="sub">가방이 가득 차서 판매 ◆ +${sold}</div>`;
   el.pop.style.setProperty('--tc',tc);
   el.pop.innerHTML=`<div class="ic">${I.icon}</div><div class="nm">${I.name}</div><div class="sub" style="color:${RAR[I.rar].col}">${RAR[I.rar].name} · <span style="color:${tc}">${TRAITS[I.trait].name}</span></div>${extra}`;
@@ -420,7 +448,7 @@ function showTitle(){
       <div><span>🔄</span><span>◆2로 새로고침, 잠금으로 진열 유지. 30초마다 새 물건이 들어오고 남은 ◆에 이자가 붙어요.</span></div>
       <div><span>⬆️</span><span>결정을 주울수록 <b>소환사 레벨</b>이 올라서 희귀·전설 마법이 더 자주 나와요. Lv.5부터는 <b style="color:#ff6bd6">신화</b>도 나와요.</span></div>
       <div><span>🎁</span><span>필드에 가끔 아이템이 생겨요. ❤️ 회복 · 🧲 결정 끌어오기 · 💣 화면 폭발 · 💰 결정 주머니</span></div>
-      <div><span>★</span><span>같은 마법 3개가 모이면 자동으로 합쳐져서 ★2, ★2 셋은 ★3이 돼요.</span></div>
+      <div><span>★</span><span>같은 마법 3개가 모이면 자동으로 합쳐져서 ★2, ★2 셋은 ★3이 돼요. 별이 오르면 <b style="color:var(--gold)">특수능력</b>이 해금돼요. (분열, 폭발, 빙결…)</span></div>
       <div><span>🎒</span><span><b>장착 5칸</b>만 싸우고 시너지에 들어가요. 나머지는 <b>보관함 10칸</b>에 모아서 합성하세요. 상점 화면에서 마법을 눌러 옮기거나 바꿀 수 있어요.</span></div>
     </div>
     ${traitGuide()}
@@ -438,6 +466,7 @@ function showPause(){
   $('resBtn').onclick=resume;$('quitBtn').onclick=showTitle;focusMain();
 }
 function resume(){mode='play';el.overlay.hidden=true;blurAll();last=performance.now();}
+function spList(id,star){return SP[id].map((t,i)=>{const need=i+2,on=star>=need;return`<div class="spl${on?' on':''}">${on?'✨':'🔒'} ★${need} ${t}</div>`;}).join('');}
 function showInfo(it){
   mode='pause';const I=ITEMS[it.id],t=TRAITS[I.trait];
   el.overlay.hidden=false;
@@ -445,7 +474,7 @@ function showInfo(it){
     <div class="info-ic">${I.icon}</div>
     <h2>${I.name} <span style="color:var(--gold)">${'★'.repeat(it.star)}</span></h2>
     <div><span class="tag" style="color:${RAR[I.rar].col}">${RAR[I.rar].name}</span><span class="tag" style="color:${t.color}">${t.name}</span><span class="tag" style="color:var(--muted)">${I.w?'공격 마법':'보조 유물'}</span></div>
-    <div class="desc">${I.desc(it.star)}${it.star<3?`<div class="nx">다음 ★${it.star+1}: ${I.desc(it.star+1)}</div>`:''}</div>
+    <div class="desc">${I.desc(it.star)}${spList(it.id,it.star)}${it.star<3?`<div class="nx">다음 ★${it.star+1}: ${I.desc(it.star+1)}</div>`:''}</div>
     <div class="btns"><button class="ghost" id="sellBtn">판매 ◆ +${sellValue(it)}</button><button class="big" id="closeBtn">닫기</button></div>
   </div>`;
   $('closeBtn').onclick=resume;$('sellBtn').onclick=()=>{sell(it);resume();};
@@ -507,14 +536,24 @@ function addText(x,y,txt,col){if(S.texts.length>70)S.texts.shift();S.texts.push(
 function burst(x,y,trait,n){const c=TRAITS[trait].color;for(let i=0;i<n;i++){const a=rnd(0,6.283),v=rnd(60,220);S.fx.push({k:'spark',x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:rnd(.3,.7),col:c});}}
 
 function hurt(e,dmg,col){
-  if(e.dead)return;
-  dmg*=st.dmg;if(e.slowT>0)dmg*=st.amp;e.hp-=dmg;e.flash=.08;
+  if(e.dead)return false;
+  dmg*=st.dmg;if(e.slowT>0)dmg*=st.amp;if(e.frozenT>0&&st.zeroAmp)dmg*=1.5;e.hp-=dmg;e.flash=.08;
   if(st.slow)e.slowT=1.2;
+  if(st.ignite&&Math.random()<st.ignite){e.burnT=3;e.burnD=Math.max(e.burnD||0,dmg*.35);}
   addText(e.x,e.y-e.r,R(dmg),col);
-  if(e.hp<=0)kill(e);
+  if(e.hp<=0){kill(e);return true;}
+  return false;
 }
+const scale=()=>1+S.t/150;
+function boom(x,y,r,dmg,col){if(S.blasts.length<150)S.blasts.push({x,y,r,dmg,col});}
+function shards(x,y,n,dmg,col,pierce=0,a0=Math.random()*6.283){
+  for(let i=0;i<n;i++){const a=a0+i*6.283/n;S.proj.push({k:'shard',x,y,vx:Math.cos(a)*360,vy:Math.sin(a)*360,r:5,dmg,life:.7,pierce,hit:new Set(),col});}
+}
+function zone(x,y,r,life,dmg,col,kind){if(S.zones.length<60)S.zones.push({x,y,r,life,max:life,dmg,col,tick:0,kind});}
+function freezeIn(x,y,r,t){for(const e of near(x,y,r+30)){if(e.dead)continue;if(d2(e,{x,y})<(r+e.r)**2)e.frozenT=Math.max(e.frozenT||0,t);}}
 function kill(e){
   e.dead=true;S.kills++;
+  if(st.shatter&&e.frozenT>0)boom(e.x,e.y,55,16*scale(),'#bdf0ff');
   if(st.blast&&S.blasts.length<120)S.blasts.push({x:e.x,y:e.y});
   if(e.type==='elite'){S.gems.push({x:e.x,y:e.y,chest:true});burst(e.x,e.y,'fire',30);}
   else{const dp=Math.max(.02,.3*Math.exp(-S.t/150)); // drop chance falls as hordes grow
@@ -568,24 +607,32 @@ function fireWeapon(it){
   const s=it.star,m=M[s],p=S.p;
   switch(it.id){
     case'firebolt':{const ts=nearestEnemies(s,520);if(!ts.length)return false;
-      for(const e of ts){const a=Math.atan2(e.y-p.y,e.x-p.x);S.proj.push({k:'bolt',x:p.x,y:p.y,vx:Math.cos(a)*430,vy:Math.sin(a)*430,r:6,dmg:13*m,life:1.5,pierce:0,hit:new Set(),col:'#ff7a45'});}return true;}
+      for(const e of ts){const a=Math.atan2(e.y-p.y,e.x-p.x);S.proj.push({k:'bolt',x:p.x,y:p.y,vx:Math.cos(a)*430,vy:Math.sin(a)*430,r:6,dmg:13*m,life:1.5,pierce:0,hit:new Set(),col:'#ff7a45',star:s});}return true;}
     case'lance':{const base=Math.atan2(p.fy,p.fx);
-      for(let i=0;i<s;i++){const a=base+(i-(s-1)/2)*.18;S.proj.push({k:'lance',x:p.x,y:p.y,vx:Math.cos(a)*540,vy:Math.sin(a)*540,r:8,dmg:20*m,life:1.1,pierce:99,hit:new Set(),col:'#6fd3ff',a});}return true;}
+      for(let i=0;i<s;i++){const a=base+(i-(s-1)/2)*.18;S.proj.push({k:'lance',x:p.x,y:p.y,vx:Math.cos(a)*540,vy:Math.sin(a)*540,r:8,dmg:20*m,life:1.1,pierce:99,hit:new Set(),col:'#6fd3ff',a,star:s});}return true;}
     case'chain':{const v=inView();if(!v.length)return false;
       let cur=v[Math.floor(Math.random()*v.length)],from={x:p.x,y:p.y};const hit=new Set();
-      for(let i=0;i<2+s&&cur;i++){S.fx.push({k:'zap',x1:from.x,y1:from.y,x2:cur.x,y2:cur.y,life:.18});hit.add(cur);hurt(cur,15*m,'#c79bff');from=cur;
+      const jumps=(2+s)*(s>=3?2:1);
+      for(let i=0;i<jumps&&cur;i++){S.fx.push({k:'zap',x1:from.x,y1:from.y,x2:cur.x,y2:cur.y,life:.18});hit.add(cur);
+        if(s>=3)cur.frozenT=Math.max(cur.frozenT||0,.4);if(s>=2)boom(cur.x,cur.y,40,6*m,'#c79bff');
+        hurt(cur,15*m,'#c79bff');from=cur;
         let nb=null,bd=170*170;for(const e of near(cur.x,cur.y,170)){if(hit.has(e)||e.dead)continue;const q=d2(e,cur);if(q<bd){bd=q;nb=e;}}cur=nb;}return true;}
     case'whirl':{const t=nearestEnemies(1,500)[0];const base=t?Math.atan2(t.y-p.y,t.x-p.x):Math.atan2(p.fy,p.fx);
-      for(let i=0;i<s;i++){const a=base+(i-(s-1)/2)*.5;S.proj.push({k:'boom',x:p.x,y:p.y,vx:Math.cos(a)*380,vy:Math.sin(a)*380,r:15,dmg:12*m,life:2.2,age:0,pierce:999,hitT:new Map(),col:'#c79bff'});}return true;}
+      for(let i=0;i<s;i++){const a=base+(i-(s-1)/2)*.5;S.proj.push({k:'boom',x:p.x,y:p.y,vx:Math.cos(a)*380,vy:Math.sin(a)*380,r:15,dmg:12*m,life:2.2,age:0,pierce:999,hitT:new Map(),col:'#c79bff',star:s});}return true;}
     case'sun':{const rad=150+20*s,hits=near(p.x,p.y,rad+30).filter(e=>!e.dead&&d2(e,p)<(rad+e.r)**2);if(!hits.length)return false;
-      S.fx.push({k:'nova',x:p.x,y:p.y,r:rad,life:.45});for(const e of hits)hurt(e,55*m,'#ffd23f');return true;}
+      S.fx.push({k:'nova',x:p.x,y:p.y,r:rad,life:.45});for(const e of hits)hurt(e,55*m,'#ffd23f');
+      if(s>=2)shards(p.x,p.y,s>=3?12:6,15*m,'#ffb04a',1);return true;}
     case'zero':{const v=inView();if(!v.length)return false;S.fx.push({k:'chill',life:.5});
       for(const e of v){e.frozenT=1.2+.4*s;hurt(e,20*m,'#bdf0ff');}return true;}
     case'thunder':{const v=inView();if(!v.length)return false;
-      for(let i=0;i<3+2*s;i++){const e=v[Math.floor(Math.random()*v.length)];if(e.dead)continue;S.fx.push({k:'zap',x1:e.x+rnd(-40,40),y1:e.y-320,x2:e.x,y2:e.y,life:.25});hurt(e,28*m,'#e3c6ff');}return true;}
+      for(let i=0;i<3+2*s;i++){const e=v[Math.floor(Math.random()*v.length)];if(e.dead)continue;S.fx.push({k:'zap',x1:e.x+rnd(-40,40),y1:e.y-320,x2:e.x,y2:e.y,life:.25});
+        if(s>=2){let nb=null,bd=150*150;for(const o of near(e.x,e.y,150)){if(o===e||o.dead)continue;const q=d2(o,e);if(q<bd){bd=q;nb=o;}}
+          if(nb){S.fx.push({k:'zap',x1:e.x,y1:e.y,x2:nb.x,y2:nb.y,life:.2});hurt(nb,17*m,'#e3c6ff');}}
+        if(s>=3)boom(e.x,e.y,50,12*m,'#e3c6ff');
+        hurt(e,28*m,'#e3c6ff');}return true;}
     case'meteor':{const v=inView();
       for(let i=0;i<s;i++){const e=v.length?v[Math.floor(Math.random()*v.length)]:null;
-        S.fx.push({k:'meteor',x:e?e.x:p.x+rnd(-200,200),y:e?e.y:p.y+rnd(-200,200),t:.7,max:.7,r:75,dmg:45*m});}return true;}
+        S.fx.push({k:'meteor',x:e?e.x:p.x+rnd(-200,200),y:e?e.y:p.y+rnd(-200,200),t:.7,max:.7,r:75,dmg:45*m,star:s});}return true;}
   }
   return false;
 }
@@ -620,29 +667,39 @@ function update(dt){
   for(const it of S.eq){const I=ITEMS[it.id];if(!I.w||!BASECD[it.id])continue;
     it.cd-=dt;if(it.cd<=0){if(fireWeapon(it)){it.cd=BASECD[it.id]*st.cd;if(st.echo&&Math.random()<st.echo){fireWeapon(it);addText(S.p.x,S.p.y-34,'연속 발동!','#c79bff');}}else it.cd=.15;}}
   // fire 3: kill explosions (queued so chains don't recurse)
-  for(let n=0;n<60&&S.blasts.length;n++){const b=S.blasts.shift();S.fx.push({k:'blast',x:b.x,y:b.y,life:.3});
-    for(const e of near(b.x,b.y,90)){if(e.dead)continue;const rr=55+e.r;if(d2(e,b)<rr*rr)hurt(e,12*(1+S.t/150),'#ffb04a');}}
+  for(let n=0;n<60&&S.blasts.length;n++){const b=S.blasts.shift(),r=b.r||55,col=b.col||'#ffb04a';S.fx.push({k:'blast',x:b.x,y:b.y,life:.3,r,col});
+    for(const e of near(b.x,b.y,r+30)){if(e.dead)continue;const rr=r+e.r;if(d2(e,b)<rr*rr)hurt(e,b.dmg||12*scale(),col);}}
+  // passive specials
+  if(st.trail&&ml>.05){S.trailT=(S.trailT||0)-dt;if(S.trailT<=0){S.trailT=.3;zone(p.x,p.y,st.trail>=3?30:22,1.6,st.trail>=3?9:5,'199,155,255','wind');}}
+  if(st.pulse){S.pulseT=(S.pulseT||10)-dt;if(S.pulseT<=0){S.pulseT=10;const v=R(p.maxhp*(st.pulse>=3?.15:.1));p.hp=Math.min(p.maxhp,p.hp+v);addText(p.x,p.y-30,'+'+v,'#7ee08a');
+    S.fx.push({k:'nova',x:p.x,y:p.y,r:160,life:.5,col:'126,224,138'});
+    for(const e of near(p.x,p.y,190)){if(e.dead)continue;const dx=e.x-p.x,dy=e.y-p.y,l=Math.hypot(dx,dy)||1;if(l<160+e.r){e.x+=dx/l*70;e.y+=dy/l*70;if(st.pulse>=3)hurt(e,30*scale(),'#7ee08a');}}}}
+  // zones (burning ground, wind trail, twisters)
+  for(const z of S.zones){z.life-=dt;z.tick-=dt;if(z.tick<=0){z.tick=.3;for(const e of near(z.x,z.y,z.r+30)){if(e.dead)continue;if(d2(e,z)<(z.r+e.r)**2)hurt(e,z.dmg,`rgb(${z.col})`);}}}
+  S.zones=S.zones.filter(z=>z.life>0);
   // continuous weapons
   S.ringA+=dt*3.2;
   for(const it of S.eq){
     if(it.id==='frostring'){const n=2+it.star,rad=78;
       for(let i=0;i<n;i++){const a=S.ringA+i*6.283/n,ox=p.x+Math.cos(a)*rad,oy=p.y+Math.sin(a)*rad;
-        for(const e of near(ox,oy,30)){if(e.dead||e.ringT>S.t)continue;const rr=e.r+10;if((e.x-ox)**2+(e.y-oy)**2<rr*rr){e.ringT=S.t+.45;hurt(e,7*M[it.star],'#6fd3ff');}}}}
+        for(const e of near(ox,oy,30)){if(e.dead||e.ringT>S.t)continue;const rr=e.r+10;if((e.x-ox)**2+(e.y-oy)**2<rr*rr){e.ringT=S.t+.45;if(it.star>=2&&Math.random()<.25)e.frozenT=Math.max(e.frozenT||0,.6);hurt(e,7*M[it.star],'#6fd3ff');}}}
+      if(it.star>=3){it.shT=(it.shT||0)-dt;if(it.shT<=0){it.shT=2;for(let i=0;i<n;i++){const a=S.ringA+i*6.283/n;shards(p.x+Math.cos(a)*rad,p.y+Math.sin(a)*rad,1,8*M[3],'#bdf0ff',0,a);}}}}
     if(it.id==='thorns'){const rad=55+15*it.star;
-      for(const e of near(p.x,p.y,rad+30)){if(e.dead||e.thornT>S.t)continue;const rr=rad+e.r;if(d2(e,p)<rr*rr){e.thornT=S.t+.35;hurt(e,5*M[it.star],'#7ee08a');}}}
+      for(const e of near(p.x,p.y,rad+30)){if(e.dead||e.thornT>S.t)continue;const rr=rad+e.r;if(d2(e,p)<rr*rr){e.thornT=S.t+.35;if(it.star>=3)e.slowT=Math.max(e.slowT,.5);if(hurt(e,5*M[it.star],'#7ee08a')&&it.star>=2)shards(e.x,e.y,it.star>=3?8:4,6*M[it.star],'#7ee08a');}}}
   }
 
   // projectiles
   for(const b of S.proj){
     b.life-=dt;
-    if(b.k==='boom'){b.age+=dt;if(b.age>.55){const a=Math.atan2(p.y-b.y,p.x-b.x),sp=Math.min(520,380+b.age*200);b.vx=Math.cos(a)*sp;b.vy=Math.sin(a)*sp;if(b.age>.7&&d2(b,p)<400)b.life=0;}}
+    if(b.k==='boom'){b.age+=dt;if(b.age>.55&&!b.turned){b.turned=true;if(b.star>=2)b.r*=1.6;if(b.star>=3)zone(b.x,b.y,34,2,b.dmg*.5,'199,155,255','twister');}
+      if(b.age>.55){const a=Math.atan2(p.y-b.y,p.x-b.x),sp=Math.min(520,380+b.age*200);b.vx=Math.cos(a)*sp;b.vy=Math.sin(a)*sp;if(b.age>.7&&d2(b,p)<400)b.life=0;}}
     b.x+=b.vx*dt;b.y+=b.vy*dt;
-    if(b.life<=0)continue;
+    if(b.life<=0){if(b.k==='lance'&&b.star>=2&&!b.split){b.split=true;shards(b.x,b.y,b.star>=3?8:5,b.dmg*.4,'#bdf0ff',b.star>=3?2:0);}continue;}
     for(const e of near(b.x,b.y,b.r+30)){
       if(e.dead)continue;const rr=e.r+b.r;if(d2(e,b)>rr*rr)continue;
       if(b.hitT){const t=b.hitT.get(e)||0;if(t>S.t)continue;b.hitT.set(e,S.t+.3);hurt(e,b.dmg,b.col);continue;}
       if(b.hit.has(e))continue;b.hit.add(e);hurt(e,b.dmg,b.col);
-      if(b.k==='bolt'){burst(b.x,b.y,'fire',4);}
+      if(b.k==='bolt'){burst(b.x,b.y,'fire',4);if(b.star>=2)boom(b.x,b.y,42,b.dmg*.4,'#ff9a55');if(b.star>=3)shards(b.x,b.y,3,b.dmg*.35,'#ff7a45');}
       if(--b.pierce<0){b.life=0;break;}
     }
   }
@@ -652,11 +709,13 @@ function update(dt){
   for(const e of S.enemies){
     if(e.dead)continue;
     e.flash=Math.max(0,e.flash-dt);e.slowT=Math.max(0,e.slowT-dt);
+    if(e.burnT>0){e.burnT-=dt;e.hp-=e.burnD*dt;if(e.hp<=0){kill(e);continue;}}
     if(e.frozenT>0){e.frozenT-=dt;e.slowT=Math.max(e.slowT,.2);continue;}
     const dx=p.x-e.x,dy=p.y-e.y,l=Math.hypot(dx,dy)||1;
     const sp=e.sp*(e.slowT>0?1-st.slow:1);
     e.x+=dx/l*sp*dt;e.y+=dy/l*sp*dt;
-    if(l<e.r+p.r&&p.inv<=0){p.hp-=e.dmg*(1-st.armor);p.inv=.7;addText(p.x,p.y-20,'-'+R(e.dmg*(1-st.armor)),'#ff5d7a');}
+    if(l<e.r+p.r&&p.inv<=0){if(st.armorNova&&S.t>(S.armorCD||0)){S.armorCD=S.t+3;freezeIn(p.x,p.y,120,1);S.fx.push({k:'nova',x:p.x,y:p.y,r:120,life:.4,col:'160,225,255'});if(st.armorNova>=3)hurt(e,40*scale(),'#bdf0ff');}
+      p.hp-=e.dmg*(1-st.armor);p.inv=.7;addText(p.x,p.y-20,'-'+R(e.dmg*(1-st.armor)),'#ff5d7a');}
     if(l>1600){e.dead=true;} // far away stragglers are dropped (respawned by flow)
   }
   // light separation
@@ -670,7 +729,7 @@ function update(dt){
     if(g.mag||q<pr*pr){g.mag=true;const l=Math.sqrt(q)||1,sp=Math.max(260,600-l);g.x+=(p.x-g.x)/l*sp*dt;g.y+=(p.y-g.y)/l*sp*dt;}
     if(q<22*22){g.got=true;
       if(g.chest){S.gem+=20;gainXp(20);toast('보물상자! 무료 마법 + ◆20');freeSummon();}
-      else{S.gem+=g.v*st.gemMul;gainXp(g.v);}}
+      else{const v=g.v*(st.dbl&&Math.random()<st.dbl?2:1);S.gem+=v*st.gemMul;gainXp(v);}}
   }
   S.gems=S.gems.filter(g=>!g.got);
   for(const f of S.items){f.life-=dt;if(d2(f,p)<(p.r+16)**2){f.life=0;useItem(f);}}
@@ -680,7 +739,9 @@ function update(dt){
   for(const f of S.fx){
     if(f.k==='meteor'){f.t-=dt;if(f.t<=0&&!f.done){f.done=true;f.life=.35;
       for(const e of near(f.x,f.y,f.r+30)){const rr=f.r+e.r;if(d2(e,f)<rr*rr)hurt(e,f.dmg,'#ffb04a');}
-      burst(f.x,f.y,'fire',22);}
+      burst(f.x,f.y,'fire',22);
+      if(!f.mini&&f.star>=2)zone(f.x,f.y,62,2.5,f.dmg*.12,'255,120,40','fire');
+      if(!f.mini&&f.star>=3)for(let i=0;i<3;i++){const a=i*2.094+rnd(0,1);S.fx.push({k:'meteor',mini:true,x:f.x+Math.cos(a)*90,y:f.y+Math.sin(a)*90,t:.4,max:.4,r:42,dmg:f.dmg*.35});}}
       if(f.done)f.life-=dt;}
     else{f.life-=dt;if(f.k==='spark'){f.x+=f.vx*dt;f.y+=f.vy*dt;f.vx*=.92;f.vy*=.92;}}
   }
@@ -690,7 +751,9 @@ function update(dt){
 
   if(p.hp<=0&&(st.revives||0)>S.revUsed){S.revUsed++;p.hp=p.maxhp*.5;p.inv=2.5;
     for(const e of near(p.x,p.y,220)){const dx=e.x-p.x,dy=e.y-p.y,l=Math.hypot(dx,dy)||1;e.x+=dx/l*140;e.y+=dy/l*140;}
-    S.fx.push({k:'nova',x:p.x,y:p.y,r:220,life:.6,col:'126,224,138'});burst(p.x,p.y,'nature',50);toast('세계수의 가호로 부활했어요!');}
+    S.fx.push({k:'nova',x:p.x,y:p.y,r:220,life:.6,col:'126,224,138'});burst(p.x,p.y,'nature',50);toast('세계수의 가호로 부활했어요!');
+    if(st.reviveStar>=2)for(const e of near(p.x,p.y,290)){if(!e.dead&&d2(e,p)<290*290)hurt(e,100*scale(),'#7ee08a');}
+    if(st.reviveStar>=3)p.inv=5;}
   if(p.hp<=0){p.hp=0;showEnd(false);}
   else if(S.t>=600){S.won=true;showEnd(true);}
 }
@@ -713,6 +776,10 @@ function render(){
   }
   // thorns aura
   for(const it of S.eq)if(it.id==='thorns'){const rad=55+15*it.star;ctx.fillStyle='rgba(126,224,138,.08)';ctx.strokeStyle='rgba(126,224,138,.35)';ctx.lineWidth=2;ctx.setLineDash([6,8]);ctx.lineDashOffset=-S.t*20;ctx.beginPath();ctx.arc(p.x,p.y,rad,0,6.283);ctx.fill();ctx.stroke();ctx.setLineDash([]);}
+  // zones
+  for(const z of S.zones){const k=Math.min(1,z.life/z.max*2);
+    if(z.kind==='twister'){ctx.save();ctx.translate(z.x,z.y);ctx.rotate(S.t*10);ctx.strokeStyle=`rgba(${z.col},${.8*k})`;ctx.lineWidth=3;for(let i=0;i<3;i++){ctx.beginPath();ctx.arc(0,0,z.r*(.4+i*.3),i,i+3.6);ctx.stroke();}ctx.restore();}
+    else{ctx.fillStyle=`rgba(${z.col},${(z.kind==='fire'?.28:.16)*k})`;ctx.beginPath();ctx.arc(z.x,z.y,z.r*(z.kind==='fire'?1+Math.sin(S.t*12+z.x)*.04:1),0,6.283);ctx.fill();}}
   // meteor markers
   for(const f of S.fx)if(f.k==='meteor'&&!f.done){const k=1-f.t/f.max;ctx.strokeStyle='rgba(255,140,60,.7)';ctx.fillStyle=`rgba(255,120,40,${.08+.15*k})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(f.x,f.y,f.r,0,6.283);ctx.fill();ctx.stroke();
     const mx=f.x+90*(1-k),my=f.y-260*(1-k);ctx.fillStyle='#ffb04a';ctx.beginPath();ctx.arc(mx,my,10,0,6.283);ctx.fill();ctx.strokeStyle='rgba(255,176,74,.5)';ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(mx,my);ctx.lineTo(mx+30,my-80);ctx.stroke();}
@@ -745,6 +812,7 @@ function render(){
   for(const b of S.proj){
     if(b.k==='bolt'){ctx.fillStyle='#ffd27a';ctx.shadowColor='#ff7a45';ctx.shadowBlur=12;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,6.283);ctx.fill();ctx.shadowBlur=0;}
     else if(b.k==='lance'){ctx.save();ctx.translate(b.x,b.y);ctx.rotate(b.a);ctx.fillStyle='#d6f6ff';ctx.shadowColor='#6fd3ff';ctx.shadowBlur=10;ctx.beginPath();ctx.moveTo(16,0);ctx.lineTo(-12,-4);ctx.lineTo(-12,4);ctx.closePath();ctx.fill();ctx.restore();}
+    else if(b.k==='shard'){ctx.fillStyle=b.col;ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,6.283);ctx.fill();}
     else if(b.k==='boom'){ctx.save();ctx.translate(b.x,b.y);ctx.rotate(S.t*14);ctx.strokeStyle='#d9bcff';ctx.lineWidth=3;ctx.shadowColor='#c79bff';ctx.shadowBlur=10;ctx.beginPath();ctx.arc(0,0,b.r,0,4.2);ctx.stroke();ctx.beginPath();ctx.arc(0,0,b.r*.55,2,5.6);ctx.stroke();ctx.restore();}
   }
   // player
@@ -761,7 +829,7 @@ function render(){
   // explosions + sparks
   for(const f of S.fx){
     if(f.k==='nova'){const k=f.life/.45;ctx.fillStyle=`rgba(${f.col||'255,200,70'},${.28*Math.min(1,k)})`;ctx.strokeStyle=`rgba(${f.col||'255,220,120'},${Math.min(1,k)})`;ctx.lineWidth=4;ctx.beginPath();ctx.arc(f.x,f.y,f.r*(1.05-.35*Math.min(1,k)),0,6.283);ctx.fill();ctx.stroke();}
-    else if(f.k==='blast'){const k=f.life/.3;ctx.strokeStyle=`rgba(255,150,60,${k})`;ctx.lineWidth=3;ctx.beginPath();ctx.arc(f.x,f.y,55*(1.1-k*.5),0,6.283);ctx.stroke();}
+    else if(f.k==='blast'){const k=f.life/.3;ctx.globalAlpha=k;ctx.strokeStyle=f.col||'#ff9640';ctx.lineWidth=3;ctx.beginPath();ctx.arc(f.x,f.y,(f.r||55)*(1.1-k*.5),0,6.283);ctx.stroke();ctx.globalAlpha=1;}
     else if(f.k==='meteor'&&f.done){const k=f.life/.35;ctx.fillStyle=`rgba(255,160,60,${.5*k})`;ctx.beginPath();ctx.arc(f.x,f.y,f.r*(1.2-k*.2),0,6.283);ctx.fill();}
     else if(f.k==='spark'){ctx.globalAlpha=Math.min(1,f.life*2);ctx.fillStyle=f.col;ctx.fillRect(f.x-2,f.y-2,4,4);ctx.globalAlpha=1;}
   }
