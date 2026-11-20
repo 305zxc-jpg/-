@@ -448,8 +448,9 @@ let tcCache={};
 const ODDS=[null,[90,10,0,0,0],[80,18,2,0,0],[70,25,5,0,0],[59,30,10,0,1],[50,33,15,1,1],[43,35,18,2,2],[36,36,22,3,3],[30,37,25,5,3],[24,38,28,6,4],[20,37,30,8,5]];
 const PERK_EVERY=2,PERK_FROM=3; // a perk pick at Lv3, 5, 7, ...
 const xpNeed=lv=>Math.round(1.7*lv*lv);
-function gainXp(v){
-  S.xp+=v*(1+.25*pk('xp')+.1*up('xp'));
+const xpMul=()=>1+.25*pk('xp')+.1*up('xp');
+function gainXp(v,raw){
+  S.xp+=raw?v:v*xpMul();
   while(S.xp>=xpNeed(S.lv)){S.xp-=xpNeed(S.lv);S.lv++;if(S.lv>=PERK_FROM&&(S.lv-PERK_FROM)%PERK_EVERY===0)S.perkQ++;
     toast(`레벨 업! Lv.${S.lv} · 최대 체력 +10`);recompute(false);burst(S.p.x,S.p.y,'storm',30);
     S.fx.push({k:'nova',x:S.p.x,y:S.p.y,r:90,life:.45,col:'143,208,255'});}
@@ -476,7 +477,8 @@ function freeSummon(){const id=roll(),r=giveItem(id);showPop(id,r.merged,r.sold)
 // ---------- shop ----------
 const SHOP_N=4,REROLL=2,RESTOCK=30;
 const pk=k=>(S&&S.perks[k])||0;
-const shopN=()=>SHOP_N+pk('shop')+(S&&S.summ==='merchant'?1:0),rerollCost=()=>REROLL,xpCost=()=>5,xpBuyAmt=()=>Math.max(6,Math.round(xpNeed(S.lv)*.2)),restockT=()=>RESTOCK-5*pk('restock'),benchN=()=>BN+3*pk('bench'),eqN=()=>EQN+pk('slot'),intCap=()=>5+3*pk('interest')+(S&&S.summ==='merchant'?5:0);
+const shopN=()=>SHOP_N+pk('shop')+(S&&S.summ==='merchant'?1:0),rerollCost=()=>REROLL,xpCost=()=>5,xpBuyAmt=()=>xpNeed(S.lv)/4, // a purchase is always a quarter level: 4 buys = 1 level
+  restockT=()=>RESTOCK-5*pk('restock'),benchN=()=>BN+3*pk('bench'),eqN=()=>EQN+pk('slot'),intCap=()=>5+3*pk('interest')+(S&&S.summ==='merchant'?5:0);
 function restock(){S.shop=[];for(let i=0;i<shopN();i++)S.shop.push(roll());S.bought=[];}
 const owned1=id=>allItems().filter(x=>x.id===id&&x.star===1).length;
 const willMerge=id=>owned1(id)>=2;
@@ -575,7 +577,7 @@ function renderShop(){
     <div class="lvrow">
       <span class="lv">Lv.${S.lv}</span>
       <span class="odds">${ODDS[Math.min(S.lv,10)].map((v,k)=>`<span style="color:${RAR[k].col}">${RAR[k].name} ${v}%</span>`).join('')}</span>
-      <span class="nx">다음 레벨까지<br>결정 ${Math.ceil((xpNeed(S.lv)-S.xp)/(1+.25*pk('xp')))}개</span>
+      <span class="nx">다음 레벨까지<br>결정 ${Math.ceil((xpNeed(S.lv)-S.xp)/xpMul())}개</span>
     </div>
     <p class="small">${left}초 뒤 새 물건 · 이자 +${intr} (◆10당 1)</p>
     <div class="offers" style="--n:${shopN()<=4?shopN():3}">${offers}</div>
@@ -586,7 +588,7 @@ function renderShop(){
     </div>
     <div class="shopfoot">
       ${act}
-      <div class="btns"><button class="ghost" id="rerollBtn" ${g<rerollCost()?'disabled':''}>새로고침 ◆${rerollCost()}</button><button class="ghost" id="xpBtn" ${g<xpCost()?'disabled':''}>경험치 ◆${xpCost()} <small class="xpn">+${xpBuyAmt()}</small></button></div>
+      <div class="btns"><button class="ghost" id="rerollBtn" ${g<rerollCost()?'disabled':''}>새로고침 ◆${rerollCost()}</button><button class="ghost" id="xpBtn" ${g<xpCost()?'disabled':''}>경험치 ◆${xpCost()} <small class="xpn">+25%</small></button></div>
       <button class="big" id="closeShop">전투로 돌아가기</button>
     </div>
   </div>`;
@@ -595,7 +597,7 @@ function renderShop(){
   el.overlay.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>tapCell(b.dataset.w,+b.dataset.i));
   const sb=$('sellSel');if(sb)sb.onclick=()=>{const it=S[S.sel.w][S.sel.i];S.sel=null;sell(it);renderShop();};
   $('rerollBtn').onclick=reroll;
-  $('xpBtn').onclick=()=>{if(S.gem<xpCost())return;S.gem-=xpCost();gainXp(xpBuyAmt()/(1+.25*pk('xp')));renderShop();};
+  $('xpBtn').onclick=()=>{if(S.gem<xpCost())return;S.gem-=xpCost();gainXp(Math.min(xpBuyAmt(),xpNeed(S.lv)-S.xp),true);renderShop();};
   $('closeShop').onclick=resume;
 }
 function mergeAll(){
