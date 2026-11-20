@@ -370,7 +370,8 @@ const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d');
 const el={shbar:$('shbar'),xpbar:$('xpbar'),lvl:$('lvl'),hpbar:$('hpbar'),hptext:$('hptext'),timer:$('timer'),gems:$('gems'),kills:$('kills'),syn:$('syn'),slots:$('slots'),drawBtn:$('drawBtn'),cost:$('cost'),overlay:$('overlay'),toast:$('toast'),pop:$('pop'),pause:$('pauseBtn')};
 let W=0,H=0,DPR=1,SC=1;
-function resize(){DPR=Math.min(3,window.devicePixelRatio||1);const r=cv.getBoundingClientRect();W=r.width;H=r.height;cv.width=Math.max(1,R(W*DPR));cv.height=Math.max(1,R(H*DPR));
+function resize(){DPR=Math.min(2,window.devicePixelRatio||1); // 2x is plenty for pixel art and saves a lot of fill-rate on 3x phones
+  const r=cv.getBoundingClientRect();W=r.width;H=r.height;cv.width=Math.max(1,R(W*DPR));cv.height=Math.max(1,R(H*DPR));
   const raw=Math.max(.7,Math.min(1.5,Math.min(W,H)/420)),kpx=Math.max(1,Math.round(2*raw*DPR));SC=kpx/(2*DPR); // one art pixel = whole device pixels
   try{applyScale();}catch(e){}
   if(ctx)ctx.imageSmoothingEnabled=false;}
@@ -2096,12 +2097,23 @@ function shadowSpr(rw){return art('sh'+rw,()=>{const rh=Math.max(1,Math.round(rw
 // stepped "pixel light" glow
 function glowSpr(col,res){return art('g'+col+res,()=>{const s=res*2,c=newCanvas(s,s),g=c.getContext('2d');
   for(let y=0;y<s;y++)for(let x=0;x<s;x++){const d=Math.hypot(x+.5-res,y+.5-res)/res;if(d>=1)continue;const a=d<.3?.85:d<.55?.5:d<.8?.24:.09;g.fillStyle=`rgba(${col},${a})`;g.fillRect(x,y,1,1);}return c;});}
-function glow(x,y,r,col,a=1){if(a<=0)return;const res=r<10?3:r<20?5:r<40?7:r<80?10:14;ctx.globalAlpha=Math.min(1,a);ctx.drawImage(glowSpr(col,res),x-r,y-r,r*2,r*2);}
+// world-space view rect (set each frame in render) for culling, plus a per-frame glow budget
+let VW={x0:-1e9,x1:1e9,y0:-1e9,y1:1e9},BLN=0,GLOWN=0,GLOWA=0,GLOWMAX=1e12;
+const offV=(x,y,rx,ry)=>x+rx<VW.x0||x-rx>VW.x1||y+ry<VW.y0||y-ry>VW.y1;
+function glow(x,y,r,col,a=1){if(a<=0||offV(x,y,r,r))return;if(++GLOWN>160&&r<40)return;if((GLOWA+=r*r*4)>GLOWMAX&&r>12)return;const res=r<10?3:r<20?5:r<40?7:r<80?10:14;ctx.globalAlpha=Math.min(1,a);ctx.drawImage(glowSpr(col,res),x-r,y-r,r*2,r*2);}
 function discSpr(res){return art('disc'+res,()=>{const s=res*2,c=newCanvas(s,s),g=c.getContext('2d');g.fillStyle='#fff';for(let y=0;y<s;y++)for(let x=0;x<s;x++)if(Math.hypot(x+.5-res,y+.5-res)<res)g.fillRect(x,y,1,1);return c;});}
-function pxDisc(x,y,r,col,a){const res=Math.max(3,Math.min(40,Math.round(r/PX)));const c=art('disc'+res+col,()=>{const b=discSpr(res),t=newCanvas(b.width,b.height),g=t.getContext('2d');g.drawImage(b,0,0);g.globalCompositeOperation='source-in';g.fillStyle=col;g.fillRect(0,0,t.width,t.height);return t;});ctx.globalAlpha=a;ctx.drawImage(c,x-r,y-r*.85,r*2,r*1.7);ctx.globalAlpha=1;}
-function pxRing(x,y,r,col,a=1,sz=PX*1.5,dash=-1){ctx.globalAlpha=Math.min(1,a);ctx.fillStyle=col;const n=Math.max(10,Math.round(6.283*r/(sz*1.25)));
-  for(let i=0;i<n;i++){if(dash>=0&&((i+dash)%4)<1.5)continue;const an=i/n*6.283;ctx.fillRect(Math.round(x+Math.cos(an)*r-sz/2),Math.round(y+Math.sin(an)*r*.85-sz/2),sz,sz);}ctx.globalAlpha=1;}
-function pxLine(pts,col,sz){ctx.fillStyle=col;for(let i=1;i<pts.length;i++){const [x1,y1]=pts[i-1],[x2,y2]=pts[i],n=Math.max(1,Math.ceil(Math.hypot(x2-x1,y2-y1)/(sz*.7)));for(let k=0;k<=n;k++){const q=k/n;ctx.fillRect(Math.round(x1+(x2-x1)*q-sz/2),Math.round(y1+(y2-y1)*q-sz/2),sz,sz);}}}
+function pxDisc(x,y,r,col,a){if(offV(x,y,r,r))return;const res=Math.max(3,Math.min(40,Math.round(r/PX)));const c=art('disc'+res+col,()=>{const b=discSpr(res),t=newCanvas(b.width,b.height),g=t.getContext('2d');g.drawImage(b,0,0);g.globalCompositeOperation='source-in';g.fillStyle=col;g.fillRect(0,0,t.width,t.height);return t;});ctx.globalAlpha=a;ctx.drawImage(c,x-r,y-r*.85,r*2,r*1.7);ctx.globalAlpha=1;}
+// dots are batched into one path: a single fill() is far cheaper than hundreds of fillRect() calls
+function pxRing(x,y,r,col,a=1,sz=PX*1.5,dash=-1){if(a<=0||r<=0||offV(x,y,r+sz,r+sz))return;ctx.globalAlpha=Math.min(1,a);ctx.fillStyle=col;const n=Math.max(10,Math.round(6.283*r/(sz*1.25))),h=sz/2;ctx.beginPath();
+  for(let i=0;i<n;i++){if(dash>=0&&((i+dash)%4)<1.5)continue;const an=i/n*6.283;ctx.rect(Math.round(x+Math.cos(an)*r-h),Math.round(y+Math.sin(an)*r*.85-h),sz,sz);}ctx.fill();ctx.globalAlpha=1;}
+// stair-stepped pixel line: consecutive cells on the same row (or column, for steep lines) merge into one rect, all in one path
+function pxLine(pts,col,sz){ctx.fillStyle=col;ctx.beginPath();const h=sz/2;
+  for(let i=1;i<pts.length;i++){const [x1,y1]=pts[i-1],[x2,y2]=pts[i],dx=x2-x1,dy=y2-y1;
+    if(Math.abs(dx)>=Math.abs(dy)){const n=Math.max(1,Math.ceil(Math.abs(dy)/sz)),sx=dx/n,sy=dy/n;
+      for(let k=0;k<n;k++){const ax=x1+sx*k,bx=ax+sx,yy=Math.round(y1+sy*(k+.5)-h),l=Math.round(Math.min(ax,bx)-h);ctx.rect(l,yy,Math.round(Math.max(ax,bx)+h)-l,sz);}}
+    else{const n=Math.max(1,Math.ceil(Math.abs(dx)/sz)),sx=dx/n,sy=dy/n;
+      for(let k=0;k<n;k++){const ay=y1+sy*k,by=ay+sy,xx=Math.round(x1+sx*(k+.5)-h),t=Math.round(Math.min(ay,by)-h);ctx.rect(xx,t,sz,Math.round(Math.max(ay,by)+h)-t);}}}
+  ctx.fill();}
 function groundTile(mid){mid=mid||(S&&S.map)||'meadow';const P=MAPS[mid].ground;return art('ground'+mid,()=>{const N=64,c=newCanvas(N,N),g=c.getContext('2d');g.fillStyle=P.base;g.fillRect(0,0,N,N);
   const put=(x,y,col)=>{g.fillStyle=col;g.fillRect(((x%N)+N)%N,((y%N)+N)%N,1,1);};
   for(let i=0;i<260;i++)put(Math.floor(hash(i,1)*N),Math.floor(hash(i,2)*N),hash(i,3)<.55?P.n1:P.n2);
@@ -2114,7 +2126,7 @@ function groundTile(mid){mid=mid||(S&&S.map)||'meadow';const P=MAPS[mid].ground;
   return c;});}
 let groundPat=null;
 function snapK(){return SC*DPR;}
-function blitA(c,x,y){const k=snapK(),w=c.width*PX,h=c.height*PX;ctx.drawImage(c,Math.round((x-w/2)*k)/k,Math.round((y-h/2)*k)/k,w,h);}
+function blitA(c,x,y){const w=c.width*PX,h=c.height*PX;if(offV(x,y,w/2,h/2))return;const k=snapK();ctx.drawImage(c,Math.round((x-w/2)*k)/k,Math.round((y-h/2)*k)/k,w,h);}
 
 const FF=[];for(let i=0;i<34;i++)FF.push({x:Math.random(),y:Math.random(),ph:Math.random()*6.28,sp:.3+Math.random()*.6,par:.25+Math.random()*.5});
 function drawFireflies(px,py,t,scale){
@@ -2127,10 +2139,10 @@ function drawFireflies(px,py,t,scale){
 // ---------- render ----------
 function render(){
   ctx.setTransform(DPR,0,0,DPR,0,0);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.imageSmoothingEnabled=false;
-  if(!S){drawTitleBg();return;}
-  const p=S.p,hw=W/2/SC,hh=H/2/SC,t=S.t,k=snapK();
+  if(!S){VW={x0:-1e9,x1:1e9,y0:-1e9,y1:1e9};drawTitleBg();return;}
+  const p=S.p,hw=W/2/SC,hh=H/2/SC,t=S.t,k=snapK();GLOWN=0;BLN=0;
   const dgm=DG();let camX=(dgm?0:p.x)+(S.shake>0?rnd(-1,1)*S.shake:0),camY=(dgm?0:p.y)+(S.shake>0?rnd(-1,1)*S.shake:0);
-  camX=Math.round(camX*k)/k;camY=Math.round(camY*k)/k;
+  camX=Math.round(camX*k)/k;camY=Math.round(camY*k)/k;VW={x0:camX-hw-24,x1:camX+hw+24,y0:camY-hh-24,y1:camY+hh+24};GLOWA=0;GLOWMAX=hw*hh*4*2.2;
   ctx.setTransform(DPR*SC,0,0,DPR*SC,Math.round(DPR*(W/2-SC*camX)),Math.round(DPR*(H/2-SC*camY)));ctx.imageSmoothingEnabled=false;
   // ground
   if(!groundPat||groundPat._m!==S.map){groundPat=ctx.createPattern(groundTile(),'repeat');groundPat._m=S.map;if(groundPat.setTransform&&window.DOMMatrix)groundPat.setTransform(new DOMMatrix().scale(PX));}
@@ -2242,7 +2254,7 @@ function render(){
   ctx.globalCompositeOperation='lighter';
   glow(p.x,p.y,100,RGB.moon,.13);
   for(const [x,y,c] of glowDeco)glow(x,y,22,c,.35);
-  for(const z of S.zones){const kz=Math.min(1,z.life/z.max*2);if(z.kind==='fire')glow(z.x,z.y,z.r*1.3,RGB.fire,.45*kz);else glow(z.x,z.y,z.r,z.col,.2*kz);}
+  {let zn=0;for(const z of S.zones){if(++zn>24)break;const kz=Math.min(1,z.life/z.max*2);if(z.kind==='fire')glow(z.x,z.y,z.r*1.3,RGB.fire,.45*kz);else glow(z.x,z.y,z.r,z.col,.2*kz);}}
   for(const g of S.gems){if(g.chest){glow(g.x,g.y,36,RGB.gold,.5);continue;}if((Math.floor(t*2+g.x*.13+g.y*.07)%5)===0)glow(g.x,g.y,10,RGB.gold,.5);}
   for(const f of S.items)glow(f.x,f.y,28,FIELD[f.k].col,.35);
   for(const e of S.enemies){
@@ -2278,7 +2290,7 @@ function render(){
     if(f.k==='zap'){const a=Math.min(1,f.life/.18),pts=[[f.x1,f.y1]];for(let q=1;q<6;q++){const kq=q/6;pts.push([f.x1+(f.x2-f.x1)*kq+rnd(-9,9),f.y1+(f.y2-f.y1)*kq+rnd(-9,9)]);}pts.push([f.x2,f.y2]);
       ctx.globalAlpha=a*.6;pxLine(pts,'#6b3e9e',PX*3);ctx.globalAlpha=a;pxLine(pts,'#a77bf3',PX*2);pxLine(pts,'#f4f4f4',PX);glow(f.x2,f.y2,20,RGB.storm,.7*a);}
     else if(f.k==='nova'){const q=Math.min(1,f.life/.45),c=f.col||'255,205,117',rr=f.r*(1.05-.35*q);pxRing(f.x,f.y,rr,`rgb(${c})`,q,PX*2);pxRing(f.x,f.y,rr*.92,'#f4f4f4',q*.7,PX);glow(f.x,f.y,rr,c,.3*q);}
-    else if(f.k==='blast'){const q=f.life/.3,r=(f.r||55),c=rgbOf(f.col||'#ef7d57');glow(f.x,f.y,r*1.2,c,.7*q);pxRing(f.x,f.y,r*(1.1-q*.5),`rgb(${c})`,q,PX*1.5);}
+    else if(f.k==='blast'){const q=f.life/.3,r=(f.r||55),c=rgbOf(f.col||'#ef7d57');if(++BLN<=14)glow(f.x,f.y,r*1.2,c,.7*q);pxRing(f.x,f.y,r*(1.1-q*.5),`rgb(${c})`,q,PX*1.5);}
     else if(f.k==='meteor'&&!f.done){const q=1-f.t/f.max,mx=f.x+90*(1-q),my=f.y-260*(1-q),sz=f.mini?.6:1;
       for(let i=4;i>=1;i--){ctx.globalAlpha=.7-i*.12;ctx.fillStyle=i>2?'#b13e53':'#ef7d57';const s=Math.round((10-i*1.6)*sz)*2;ctx.fillRect(Math.round(mx+i*7*sz-s/2),Math.round(my-i*20*sz-s/2),s,s);}
       ctx.globalAlpha=1;const rk=art('rock',()=>fromGrid(GRID.rock));ctx.drawImage(rk,Math.round(mx-rk.width*sz),Math.round(my-rk.height*sz),rk.width*PX*sz,rk.height*PX*sz);glow(mx,my,16*sz,RGB.fire,.7);}
