@@ -426,6 +426,7 @@ function recompute(init){
   s.revives=(s.revives||0)+up('rev')+(s.nature6?1:0);
   if(s.storm6)s.echo=1;
   s.maxhp+=10*(S.lv-1); // everyone grows sturdier with level
+  s.dmg*=1+.06*pk('power');s.maxhp+=30*pk('vital');
   s.maxhp*=1+.25*pk('hp');
   if(sid==='merchant')s.maxhp*=.8;if(sid==='archmage')s.maxhp*=.75;
   const set5=Object.keys(TRAITS).find(k=>tc[k]>=5)||null;
@@ -516,12 +517,15 @@ const PERKS={
   hp:{name:'최대 체력 +25%',icon:'heart',max:4,desc:()=>'최대 체력이 늘고 그만큼 회복해요'},
   speed:{name:'이동 속도 +10%',icon:'boots',max:3,desc:()=>'더 빨리 움직여요'},
   drop:{name:'결정 드롭 +30%',icon:'gemi',max:4,desc:()=>'적이 결정을 더 자주 떨어뜨려요'},
+  power:{name:'마력 +6%',icon:'fireorb',max:99,desc:()=>`모든 피해 +6% (지금까지 +${6*pk('power')}%)`},
+  vital:{name:'생명력 +30',icon:'lifetree',max:99,desc:()=>`최대 체력 +30 (지금까지 +${30*pk('vital')})`},
   restock:{name:'입고 주기 -5초',icon:'clock',max:3,desc:()=>`새 물건이 ${restockT()}초에서 ${restockT()-5}초마다`},
 };
 function showPerk(){
   releaseJoy();
-  const pool=Object.keys(PERKS).filter(k=>pk(k)<PERKS[k].max&&(!PERKS[k].minLv||S.lv>=PERKS[k].minLv));
-  if(!pool.length){S.perkQ=0;return;}
+  let pool=Object.keys(PERKS).filter(k=>PERKS[k].max<99&&pk(k)<PERKS[k].max&&(!PERKS[k].minLv||S.lv>=PERKS[k].minLv));
+  if(pool.length<(S.summ==='archmage'?4:3))pool=pool.concat(['power','vital']);
+  if(!pool.length){S.perkQ=0;if(mode==='perk'){el.overlay.innerHTML='';resume();}return;}
   const pick=[];const nPick=S.summ==='archmage'?4:3;while(pick.length<nPick&&pool.length)pick.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
   mode='perk';el.overlay.hidden=false;
   el.overlay.innerHTML=`<div class="card"><div class="kicker">LEVEL ${S.lv}</div><h2>특성 선택</h2><p class="small">하나를 골라요. 이번 판 동안 유지돼요.</p>
