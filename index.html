@@ -478,7 +478,7 @@ function freeSummon(){const id=roll(),r=giveItem(id);showPop(id,r.merged,r.sold)
 // ---------- shop ----------
 const SHOP_N=4,REROLL=2,RESTOCK=30;
 const pk=k=>(S&&S.perks[k])||0;
-const shopN=()=>SHOP_N+pk('shop')+(S&&S.summ==='merchant'?1:0),rerollCost=()=>REROLL,xpCost=()=>5,xpBuyAmt=()=>xpNeed(S.lv)/4, // a purchase is always a quarter level: 4 buys = 1 level
+const shopN=()=>SHOP_N+pk('shop')+(S&&S.summ==='merchant'?1:0),rerollCost=()=>REROLL,xpCost=()=>5,xpBuyAmt=()=>8, // fixed amount: higher levels naturally need more purchases
   restockT=()=>RESTOCK-5*pk('restock'),benchN=()=>BN+3*pk('bench'),eqN=()=>EQN+pk('slot'),intCap=()=>5+3*pk('interest')+(S&&S.summ==='merchant'?5:0);
 function restock(){S.shop=[];for(let i=0;i<shopN();i++)S.shop.push(roll());S.bought=[];}
 const owned1=id=>allItems().filter(x=>x.id===id&&x.star===1).length;
@@ -592,7 +592,7 @@ function renderShop(){
     </div>
     <div class="shopfoot">
       ${act}
-      <div class="btns"><button class="ghost" id="rerollBtn" ${g<rerollCost()?'disabled':''}>새로고침 ◆${rerollCost()}</button><button class="ghost" id="xpBtn" ${g<xpCost()?'disabled':''}>경험치 ◆${xpCost()} <small class="xpn">+25%</small></button></div>
+      <div class="btns"><button class="ghost" id="rerollBtn" ${g<rerollCost()?'disabled':''}>새로고침 ◆${rerollCost()}</button><button class="ghost" id="xpBtn" ${g<xpCost()?'disabled':''}>경험치 ◆${xpCost()} <small class="xpn">+${xpBuyAmt()}</small></button></div>
       <button class="big" id="closeShop">전투로 돌아가기</button>
     </div>
   </div>`;
@@ -601,7 +601,7 @@ function renderShop(){
   el.overlay.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>tapCell(b.dataset.w,+b.dataset.i));
   const sb=$('sellSel');if(sb)sb.onclick=()=>{const it=S[S.sel.w][S.sel.i];S.sel=null;sell(it);renderShop();};
   $('rerollBtn').onclick=reroll;
-  $('xpBtn').onclick=()=>{if(S.gem<xpCost())return;S.gem-=xpCost();gainXp(Math.min(xpBuyAmt(),xpNeed(S.lv)-S.xp),true);renderShop();};
+  $('xpBtn').onclick=()=>{if(S.gem<xpCost())return;S.gem-=xpCost();gainXp(xpBuyAmt(),true);renderShop();};
   $('closeShop').onclick=resume;
 }
 function mergeAll(){
